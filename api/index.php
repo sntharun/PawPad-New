@@ -3,7 +3,7 @@
  * Pawpad API — https://api.pawpad.in/index.php?action=<name>
  *
  * Public:  health (GET), get_content (GET or POST), submit_application,
- *          booking_availability (GET or POST), create_booking, create_boarding_request
+ *          booking_availability (GET or POST), create_booking, boarding_availability, create_boarding_request
  * Staff (Owner, Administrator and Manager):
  *          login, logout, me, change_password,
  *          list_bookings, list_upcoming_bookings, cancel_booking, reschedule_booking,
@@ -83,6 +83,9 @@ try {
             break;
         case 'create_booking':
             send_json(['ok' => true] + create_booking($input), 201);
+            break;
+        case 'boarding_availability':
+            send_json(['ok' => true] + boarding_availability());
             break;
         case 'create_boarding_request':
             send_json(['ok' => true] + create_boarding_request($input), 201);

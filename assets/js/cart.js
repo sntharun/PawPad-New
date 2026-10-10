@@ -690,10 +690,12 @@ function CartDrawer({ open, onClose, onCheckout }) {
                   ),
                   React.createElement("h5", { className: "cart-item-title" }, item.title),
                   item.desc ? React.createElement("p", { className: "cart-item-desc" }, item.desc) : null,
+                  isPerNightItem(item) && React.createElement("p", { className: "cart-item-desc", "data-per-night-hint": true, style: { fontWeight: 600 } },
+                    `${item.quantity || 1} dog${(item.quantity || 1) === 1 ? "" : "s"}, per night. You'll choose check-in and check-out dates at checkout.`),
                   React.createElement(
                     "div",
                     { className: "cart-item-bottom" },
-                    React.createElement("span", { className: "cart-item-price" }, `₹${formatInr(item.price * (item.quantity || 1))}`),
+                    React.createElement("span", { className: "cart-item-price" }, `₹${formatInr(item.price * (item.quantity || 1))}${isPerNightItem(item) ? " / night" : ""}`),
                     React.createElement(
                       "div",
                       { className: "cart-qty-stepper" },
@@ -812,6 +814,32 @@ const FLEXIBLE_PET_TYPE_SERVICES = [
   "bath-brush-subscription"
 ];
 
+// Boarding can be requested up to about 3 months ahead; other enquiries up to 14 days.
+const BOARDING_DAYS_AHEAD = 92;
+
+/** "2026-12-24" (local date, as a date box gives it) for a Date. */
+function localDateValue(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Overnight boarding is priced per dog, per night: the cart quantity is the number of dogs,
+ * and the nights come from the check-in and check-out dates chosen at checkout.
+ */
+function isPerNightItem(item) {
+  return Boolean(item) && item.category === "Boarding" && (item.id === "boarding-overnight" || /night/i.test(String(item.priceDisplay || "")));
+}
+const BOARDING_MAX_NIGHTS = 60;
+
+/** Nights between check-in and check-out (date strings from the date boxes); 0 if either is missing. */
+function stayNights(startIso, endIso) {
+  if (!startIso || !endIso) return 0;
+  const a = new Date(startIso);
+  const b = new Date(endIso);
+  const n = Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+  return n > 0 ? n : 0;
+}
+
 function generateCheckoutDates() {
   const days = [];
   const today = new Date();
@@ -851,7 +879,7 @@ function derivePetSlots(items) {
       slots.push({
         id: `${item.id}-${slots.length}`,
         serviceId: item.id,
-        serviceTitle: item.title + (qty > 1 ? ` (Slot #${q + 1})` : ""),
+        serviceTitle: item.title + (qty > 1 ? (item.category === "Boarding" ? ` (Dog ${q + 1})` : ` (Slot #${q + 1})`) : ""),
         price: typeof item.price === "number" && !isNaN(item.price) ? item.price : null,
         petType: isCat ? "Cat" : (isDog ? "Dog" : defaultFlexibleType),
         isDogOnly: isDog && !isFlexible,
@@ -893,6 +921,7 @@ function CheckoutModal({ open, onClose }) {
     area: "",
     contactMethod: "WhatsApp",
     date: null,
+    endDate: null,
     time: null,
     notes: ""
   });
@@ -905,6 +934,13 @@ function CheckoutModal({ open, onClose }) {
   const [bookingError, setBookingError] = useStateC("");
   const [placing, setPlacing] = useStateC(false);
   const [availability, reloadAvailability] = typeof useSlotAvailability === "function" ? useSlotAvailability(open) : [null, () => {}];
+  // Nights already full or nearly full (confirmed stays), so a full night is flagged before sending.
+  const [boardingNights, setBoardingNights] = useStateC(null);
+  useEffectC(() => {
+    if (!open || !window.PawpadApi || !window.PawpadApi.isEnabled()) return;
+    if (!PawpadCartStore.getItems().some(isPerNightItem)) return;
+    window.PawpadApi.call("boarding_availability", {}).then((r) => { if (r.ok) setBoardingNights(r.data); });
+  }, [open]);
 
   useEffectC(() => {
     if (open) {
@@ -966,7 +1002,12 @@ function CheckoutModal({ open, onClose }) {
   const anyPetHasCompletedTrial = pets.some((p) => p.isOvernight && p.hasCompletedTrialDay);
   const petsNeedingTrial = pets.filter((p) => p.isOvernight && p.hasCompletedTrialDay === false).length;
   const mandatoryTrialDayFee = hasOvernight ? Math.max(0, petsNeedingTrial - trialDayItems) * boardingTrialDayPrice() : 0;
-  const subtotal = items.reduce((acc, i) => acc + (Number(i.price) || 0) * (i.quantity || 1), 0);
+  const hasStayItems = items.some(isPerNightItem);
+  const nights = hasStayItems ? stayNights(customerData.date, customerData.endDate) : 0;
+  // Dogs staying overnight: one per unit of each per-night item.
+  const stayDogs = items.filter(isPerNightItem).reduce((n, i) => n + (i.quantity || 1), 0);
+  const lineTotal = (i) => (Number(i.price) || 0) * (i.quantity || 1) * (isPerNightItem(i) ? Math.max(1, nights) : 1);
+  const subtotal = items.reduce((acc, i) => acc + lineTotal(i), 0);
   const finalTotal = subtotal + mandatoryTrialDayFee;
 
   const updCustomer = (k, v) => setCustomerData((d) => ({ ...d, [k]: v }));
@@ -976,6 +1017,33 @@ function CheckoutModal({ open, onClose }) {
   const hasSlotPets = slotPetIndexes.length > 0;
   // Boarding and course/consulting items are still enquiries with a preferred date.
   const hasEnquiryItems = items.some((i) => typeof PawpadSlots === "undefined" || !PawpadSlots.takesSlot(i));
+  const hasBoardingItems = items.some((i) => i.category === "Boarding");
+  // The preferred enquiry / boarding date, e.g. "Thu, 24 Dec 2026".
+  const enquiryDateLabel = customerData.date
+    ? new Date(customerData.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+    : "To be scheduled";
+  const endDateLabel = customerData.endDate
+    ? new Date(customerData.endDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+    : "";
+  // "Mon, 12 Oct 2026 → Sat, 17 Oct 2026 (5 nights)"
+  const stayLabel = hasStayItems && nights > 0 ? `${enquiryDateLabel} → ${endDateLabel} (${nights} night${nights === 1 ? "" : "s"})` : "";
+  const dogsPerNight = boardingNights ? boardingNights.dogsPerNight : 3;
+  const tooManyDogs = hasStayItems && stayDogs > dogsPerNight;
+  // Nights of the chosen stay without room for these dogs.
+  const fullNights = (() => {
+    if (!stayLabel || !boardingNights) return [];
+    const left = {};
+    (boardingNights.nights || []).forEach((n) => { left[n.date] = n.left; });
+    const out = [];
+    const d = new Date(customerData.date);
+    for (let k = 0; k < nights; k++) {
+      const v = localDateValue(d);
+      if ((v in left ? left[v] : dogsPerNight) < stayDogs) out.push(v);
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  })();
+  const isThursdayValue = (iso) => Boolean(iso) && new Date(iso).getDay() === 4;
   const updSlot = (idx, choice) => {
     setBookingError("");
     setSlotChoices((prev) => {
@@ -1127,6 +1195,11 @@ function CheckoutModal({ open, onClose }) {
       return pets.length > 0 && pets.every((p, idx) => isPetValid(p, idx));
     }
     if (step === scheduleStepIndex) {
+      if (hasBoardingItems && isThursdayValue(customerData.date)) return false; // closed on Thursdays
+      if (hasStayItems) {
+        // An overnight stay needs both dates, no Thursday check-out, and room on every night.
+        if (!customerData.date || nights < 1 || isThursdayValue(customerData.endDate) || tooManyDogs || fullNights.length) return false;
+      }
       return slotPetIndexes.every((idx) => slotChoices[idx] && slotChoices[idx].date && slotChoices[idx].time);
     }
     return true;
@@ -1202,10 +1275,11 @@ function CheckoutModal({ open, onClose }) {
       pets: resolvedPets,
       pet: resolvedPets.length > 0 ? resolvedPets[0] : null,
       appointment: {
-        date: customerData.date ? new Date(customerData.date).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" }) : "To be scheduled",
+        date: stayLabel || enquiryDateLabel,
         time: customerData.time || "Flexible",
         notes: customerData.notes
       },
+      boardingStay: hasBoardingItems ? (stayLabel || enquiryDateLabel) : "",
       createdAt: new Date().toISOString()
     };
 
@@ -1255,10 +1329,20 @@ function CheckoutModal({ open, onClose }) {
       setPlacing(true);
       const boarding = await window.PawpadApi.call("create_boarding_request", {
         customer: orderPayload.customer,
-        stayDate: orderPayload.appointment.date,
-        stayTime: orderPayload.appointment.time,
+        stayDate: enquiryDateLabel,
+        stayTime: customerData.time || "Flexible",
+        stayEnd: stayLabel ? endDateLabel : "",
+        checkIn: stayLabel ? localDateValue(new Date(customerData.date)) : "",
+        checkOut: stayLabel ? localDateValue(new Date(customerData.endDate)) : "",
+        dogs: stayLabel ? stayDogs : 0,
         notes: customerData.notes || "",
-        items: boardingItems.map((i) => ({ title: i.title, quantity: i.quantity || 1, priceDisplay: i.priceDisplay || `₹${formatInr(i.price)}` })),
+        items: boardingItems.map((i) => ({
+          title: i.title,
+          quantity: i.quantity || 1,
+          nights: isPerNightItem(i) ? nights : 0,
+          priceDisplay: i.priceDisplay || `₹${formatInr(i.price)}`,
+          lineTotal: `₹${formatInr(lineTotal(i))}`
+        })),
         pets: resolvedPets.filter((p, idx) => petSlots[idx] && String(petSlots[idx].serviceId || "").startsWith("boarding")),
         total: `₹${formatInr(finalTotal)}`,
         trialFee: mandatoryTrialDayFee > 0 ? `₹${formatInr(mandatoryTrialDayFee)}` : "",
@@ -1268,6 +1352,16 @@ function CheckoutModal({ open, onClose }) {
       if (boarding.ok) {
         orderPayload.boardingRef = boarding.data.ref;
         if (!hasSlotPets) orderPayload.orderId = boarding.data.ref; // no grooming booking: use the boarding reference
+      } else if (boarding.status === 409) {
+        // A night filled up meanwhile (or too many dogs).
+        const message = (boarding.data && boarding.data.error) || "Boarding is fully booked on those dates.";
+        if (!hasSlotPets) {
+          setBookingError(message);
+          window.PawpadApi.call("boarding_availability", {}).then((r) => { if (r.ok) setBoardingNights(r.data); });
+          setStep(scheduleStepIndex);
+          return;
+        }
+        orderPayload.boardingError = message; // the grooming booking is already made
       }
     }
 
@@ -1374,6 +1468,18 @@ function CheckoutModal({ open, onClose }) {
                   `${p.name} (${p.type}${p.breed ? ` · ${p.breed}` : ""})`
                 )).join(" | ")
               )
+            ),
+            completedOrder.confirmedSlots && completedOrder.boardingStay && !completedOrder.boardingError && React.createElement(
+              "div",
+              { className: "ref-row" },
+              React.createElement("span", null, "Boarding stay"),
+              React.createElement("strong", null, completedOrder.boardingStay)
+            ),
+            completedOrder.boardingError && React.createElement(
+              "div",
+              { className: "ref-row", role: "alert", style: { color: "var(--danger, #b3261e)" } },
+              React.createElement("span", null, "Boarding not requested"),
+              React.createElement("strong", null, completedOrder.boardingError)
             ),
             completedOrder.confirmedSlots
               ? completedOrder.confirmedSlots.map((b, i) => React.createElement(
@@ -1947,8 +2053,67 @@ function CheckoutModal({ open, onClose }) {
               (!hasSlotPets || hasEnquiryItems) && React.createElement(
                 "div",
                 { className: "date-picker-wrap" },
-                React.createElement("label", { className: "sub-label" }, "Select Date (Next 14 Days)"),
-                React.createElement(
+                !hasStayItems && React.createElement("label", { className: "sub-label", htmlFor: hasBoardingItems ? "boarding-date" : undefined },
+                  hasBoardingItems ? "Select Date (up to 3 months ahead)" : "Select Date (Next 14 Days)"),
+                // Boarding: date boxes (check-in, and check-out for overnight stays) covering the next 3 months.
+                hasBoardingItems && (() => {
+                  const min = new Date(); // boarding can start today
+                  const max = new Date(); max.setDate(max.getDate() + BOARDING_DAYS_AHEAD);
+                  const value = customerData.date ? localDateValue(new Date(customerData.date)) : "";
+                  const endValue = customerData.endDate ? localDateValue(new Date(customerData.endDate)) : "";
+                  const endMinDate = value ? PawpadSlots.toDate(value) : new Date(min);
+                  endMinDate.setDate(endMinDate.getDate() + 1);
+                  const endMaxDate = value ? PawpadSlots.toDate(value) : new Date(max);
+                  endMaxDate.setDate(endMaxDate.getDate() + BOARDING_MAX_NIGHTS);
+                  const boxStyle = { padding: "12px 14px", borderRadius: 12, border: "1px solid var(--line, #ddd)", fontSize: 16, minWidth: 200 };
+                  const thursday = isThursdayValue(customerData.date) || (hasStayItems && isThursdayValue(customerData.endDate));
+                  const problem = thursday
+                    ? `The studio is closed on Thursdays, so ${isThursdayValue(customerData.date) ? "check-in" : "check-out"} can't be on a Thursday. Please choose another day.`
+                    : tooManyDogs
+                      ? `We can board up to ${dogsPerNight} dogs per night. Please WhatsApp us on +91 91484 43330 for a larger group.`
+                      : fullNights.length
+                        ? `Sorry, boarding is fully booked on ${fullNights.slice(0, 4).map((v) => PawpadSlots.formatDate(v, { weekday: "short", day: "numeric", month: "short" })).join(", ")}${fullNights.length > 4 ? ` and ${fullNights.length - 4} more` : ""} (up to ${dogsPerNight} dogs per night). Please choose other dates.`
+                        : "";
+                  const info = hasStayItems
+                    ? (stayLabel ? `${nights} night${nights === 1 ? "" : "s"} · ${stayDogs} dog${stayDogs === 1 ? "" : "s"}. We'll confirm the dates with you.` : "Choose the day you drop your dog off and the day you pick them up.")
+                    : "From today up to 3 months ahead. We'll confirm the dates with you.";
+                  return React.createElement("div", null,
+                    React.createElement("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" } },
+                      React.createElement("div", null,
+                      hasStayItems && React.createElement("label", { className: "sub-label", htmlFor: "boarding-date", style: { display: "block" } }, "Check-in date"),
+                      React.createElement("input", {
+                        id: "boarding-date", type: "date", className: "boarding-date-input", "aria-label": hasStayItems ? "Check-in date" : "Date",
+                        min: localDateValue(min), max: localDateValue(max), value,
+                        onChange: (e) => {
+                          const v = e.target.value;
+                          if (!v) return updCustomer("date", "");
+                          if (v < localDateValue(min) || v > localDateValue(max)) return;
+                          setCustomerData((d) => {
+                            const next = { ...d, date: PawpadSlots.toDate(v).toISOString() };
+                            // A check-out on or before the new check-in no longer fits.
+                            if (next.endDate && stayNights(next.date, next.endDate) < 1) next.endDate = null;
+                            return next;
+                          });
+                        },
+                        style: boxStyle
+                      })),
+                      hasStayItems && React.createElement("div", null,
+                        React.createElement("label", { className: "sub-label", htmlFor: "boarding-end-date", style: { display: "block" } }, "Check-out date"),
+                        React.createElement("input", {
+                          id: "boarding-end-date", type: "date", className: "boarding-date-input", "aria-label": "Check-out date",
+                          min: localDateValue(endMinDate), max: localDateValue(endMaxDate), value: endValue, disabled: !value,
+                          onChange: (e) => {
+                            const v = e.target.value;
+                            if (!v) return updCustomer("endDate", null);
+                            if (v < localDateValue(endMinDate) || v > localDateValue(endMaxDate)) return;
+                            updCustomer("endDate", PawpadSlots.toDate(v).toISOString());
+                          },
+                          style: boxStyle
+                        }))),
+                    React.createElement("p", { className: "lead-sm", "data-stay-message": problem ? "problem" : "info", role: problem ? "alert" : undefined, style: { marginTop: 8, fontSize: 13, color: problem ? "var(--danger, #b3261e)" : undefined } },
+                      problem || info));
+                })(),
+                !hasBoardingItems && React.createElement(
                   "div",
                   { className: "date-chip-grid" },
                   generateCheckoutDates().map((d, i) => {
@@ -2043,9 +2208,11 @@ function CheckoutModal({ open, onClose }) {
                           "div",
                           null,
                           React.createElement("strong", null, item.title),
-                          React.createElement("span", { className: "review-item-qty" }, ` × ${item.quantity || 1}`)
+                          React.createElement("span", { className: "review-item-qty" }, isPerNightItem(item)
+                            ? ` · ${item.quantity || 1} dog${(item.quantity || 1) === 1 ? "" : "s"} × ${Math.max(1, nights)} night${Math.max(1, nights) === 1 ? "" : "s"}`
+                            : ` × ${item.quantity || 1}`)
                         ),
-                        React.createElement("span", { className: "review-item-price" }, `₹${formatInr(item.price * (item.quantity || 1))}`)
+                        React.createElement("span", { className: "review-item-price" }, `₹${formatInr(lineTotal(item))}`)
                       )
                     ),
                     mandatoryTrialDayFee > 0 &&
@@ -2156,16 +2323,17 @@ function CheckoutModal({ open, onClose }) {
                       "div",
                       null,
                       React.createElement("span", { className: "review-label" }, "Schedule:"),
-                      hasSlotPets
-                        ? slotPetIndexes.map((idx) => React.createElement("p", { key: "rv-" + idx },
-                            `${(pets[idx] && pets[idx].name) || "Pet"}: ${slotLabel(slotChoices[idx])}`))
-                        : React.createElement(
-                        "p",
-                        null,
-                        customerData.date
-                          ? `${new Date(customerData.date).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })} · ${customerData.time || "Morning"}`
-                          : "To be coordinated on WhatsApp/Call"
-                      )
+                      hasSlotPets && slotPetIndexes.map((idx) => React.createElement("p", { key: "rv-" + idx },
+                        `${(pets[idx] && pets[idx].name) || "Pet"}: ${slotLabel(slotChoices[idx])}`)),
+                      hasStayItems && stayLabel
+                        ? React.createElement("p", { "data-review-stay": true }, `Boarding: ${stayLabel}${customerData.time ? ` · drop-off ${customerData.time}` : ""}`)
+                        : (!hasSlotPets || hasBoardingItems) && React.createElement(
+                          "p",
+                          null,
+                          customerData.date
+                            ? `${hasSlotPets ? "Boarding: " : ""}${new Date(customerData.date).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })} · ${customerData.time || "Morning"}`
+                            : "To be coordinated on WhatsApp/Call"
+                        )
                     )
                   ),
                   React.createElement(

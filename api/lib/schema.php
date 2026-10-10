@@ -11,7 +11,7 @@ if (!defined('PAWPAD_API')) {
 }
 
 // Raise this whenever create_tables() gains a table, so servers add it on the next request.
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 /**
  * Creates any missing tables after an update, without needing setup.php again.
@@ -33,6 +33,11 @@ function ensure_schema(PDO $pdo): void
     add_column_if_missing($pdo, 'bookings', 'price', "DECIMAL(10,2) NULL");
     add_column_if_missing($pdo, 'applications', 'enrolled_at', "DATETIME NULL");
     add_column_if_missing($pdo, 'bookings', 'source', "VARCHAR(20) NOT NULL DEFAULT 'website'");
+    add_column_if_missing($pdo, 'boarding_requests', 'stay_end', "VARCHAR(40) NOT NULL DEFAULT ''");
+    add_column_if_missing($pdo, 'boarding_requests', 'nights', "SMALLINT UNSIGNED NOT NULL DEFAULT 0");
+    add_column_if_missing($pdo, 'boarding_requests', 'check_in', "DATE NULL");
+    add_column_if_missing($pdo, 'boarding_requests', 'check_out', "DATE NULL");
+    add_column_if_missing($pdo, 'boarding_requests', 'dogs', "SMALLINT UNSIGNED NOT NULL DEFAULT 0");
     $pdo->prepare('INSERT INTO schema_info (id, version) VALUES (1, ?) ON DUPLICATE KEY UPDATE version = VALUES(version)')
         ->execute([SCHEMA_VERSION]);
 }
@@ -237,6 +242,11 @@ function create_tables(PDO $pdo): void
         contact_method VARCHAR(30) NOT NULL DEFAULT '',
         stay_date VARCHAR(40) NOT NULL DEFAULT '',
         stay_time VARCHAR(40) NOT NULL DEFAULT '',
+        stay_end VARCHAR(40) NOT NULL DEFAULT '',
+        nights SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        check_in DATE NULL,
+        check_out DATE NULL,
+        dogs SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         pets MEDIUMTEXT NOT NULL,
         items MEDIUMTEXT NOT NULL,
         total VARCHAR(40) NOT NULL DEFAULT '',

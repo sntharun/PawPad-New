@@ -49,7 +49,9 @@ return [
     // Copy the exact "Calendar URL" from cPanel -> Calendars and Contacts
     // Configuration if it differs from this one.
     'caldav_calendar_url' => 'https://cpcalendars.pawpad.in:2080/calendars/info@pawpad.in/calendar',
-    'booking_days_ahead'  => 30,   // customers can book tomorrow up to this many days ahead
+    'booking_days_ahead'  => 30,   // customers can book today up to this many days ahead
+    'booking_same_day_notice_minutes' => 60, // today's times can be booked online until this many minutes before they start
+    'boarding_dogs_per_night' => 3, // the most dogs boarding on one night (counts confirmed stays)
     'booking_rate_limit_per_hour' => 20, // bookings from one network per hour (stops spam)
 
     // Admin uploads (images and PDFs) are saved in the uploads/ folder.

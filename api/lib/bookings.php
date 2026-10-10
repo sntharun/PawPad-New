@@ -7,7 +7,7 @@
  *   Sunday also 10:00. Closed on Thursdays.
  * - 19:00 is only for services without a haircut / clipping.
  * - One booking per start time; every grooming service (one pet) uses one slot.
- * - Bookings from tomorrow up to 30 days ahead. Payment at the studio.
+ * - Bookings from today (times at least an hour away) up to 30 days ahead. Payment at the studio.
  * A slot is free when it isn't booked, isn't blocked by an admin, isn't in a
  * studio closure, and has no event in the info@pawpad.in calendar.
  */
@@ -82,12 +82,28 @@ function slot_times_for(DateTimeImmutable $day): array
     return $weekday >= 6 ? array_merge([WEEKEND_EXTRA_TIME], WEEKDAY_TIMES) : WEEKDAY_TIMES;
 }
 
-/** Dates customers can book: tomorrow up to 30 days ahead. */
+/**
+ * How soon a same-day slot can still be booked online (config: booking_same_day_notice_minutes,
+ * default 60). The admin panel can use any slot that hasn't started yet.
+ */
+function same_day_notice_minutes(): int
+{
+    return max(0, min(720, (int) (pawpad_config()['booking_same_day_notice_minutes'] ?? 60)));
+}
+
+/** True when the slot starts too soon (or has already started) to be booked. */
+function slot_too_soon(string $date, string $time, int $noticeMinutes): bool
+{
+    $now = new DateTimeImmutable('now', studio_tz());
+    return slot_start($date, $time) <= $now->modify('+' . $noticeMinutes . ' minutes');
+}
+
+/** Dates customers can book: today up to 30 days ahead. */
 function bookable_dates(): array
 {
     $today = studio_today();
     $dates = [];
-    for ($i = 1; $i <= booking_days_ahead(); $i++) {
+    for ($i = 0; $i <= booking_days_ahead(); $i++) {
         $dates[] = $today->modify('+' . $i . ' days')->format('Y-m-d');
     }
     return $dates;
@@ -240,7 +256,7 @@ function booking_availability(): array
     foreach ($states['days'] as $date => $day) {
         $free = [];
         foreach ($day['slots'] as $slot) {
-            if ($slot['state'] === 'free') {
+            if ($slot['state'] === 'free' && !slot_too_soon($date, $slot['time'], same_day_notice_minutes())) {
                 $free[] = $slot['time'];
             }
         }
@@ -341,13 +357,17 @@ function create_booking(array $input): array
         $day = parse_studio_date($date);
         $label = 'Pet ' . ($index + 1);
         if (!$day || !isset($allowedDates[$date])) {
-            json_error($label . ': please choose a date from tomorrow up to ' . booking_days_ahead() . ' days ahead.');
+            json_error($label . ': please choose a date from today up to ' . booking_days_ahead() . ' days ahead.');
         }
         if (!in_array($time, slot_times_for($day), true)) {
             json_error($label . ': the studio has no ' . $time . ' slot on ' . $day->format('l') . 's.');
         }
         if (!service_allows_time($serviceId, $time)) {
             json_error($label . ': the 7 PM slot is only for services without a haircut or clipping. Please choose an earlier time.');
+        }
+        if (slot_too_soon($date, $time, same_day_notice_minutes())) {
+            send_slot_taken([['date' => $date, 'time' => $time]], $label . ': ' . friendly_slot($date, $time)
+                . ' is too soon to book online. Please choose a later time, or WhatsApp us on ' . STUDIO_WHATSAPP . '.');
         }
         if (isset($seen[$date . ' ' . $time])) {
             json_error('Each pet needs its own time slot. Two pets are booked for ' . friendly_slot($date, $time) . '.');
@@ -680,10 +700,13 @@ function reschedule_booking(array $admin, array $input): array
     $time = (string) ($input['time'] ?? '');
     $day = parse_studio_date($date);
     if (!$day || !in_array($date, bookable_dates(), true)) {
-        json_error('Please choose a date from tomorrow up to ' . booking_days_ahead() . ' days ahead.');
+        json_error('Please choose a date from today up to ' . booking_days_ahead() . ' days ahead.');
     }
     if (!in_array($time, slot_times_for($day), true)) {
         json_error('The studio has no ' . $time . ' slot on that day.');
+    }
+    if (slot_too_soon($date, $time, 0)) {
+        json_error(friendly_slot($date, $time) . ' has already started. Please choose a later time.', 409);
     }
     if (!service_allows_time($row['service_id'], $time)) {
         json_error('The 7 PM slot is only for services without a haircut or clipping.');

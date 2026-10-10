@@ -128,9 +128,10 @@ The times become bookable again and the calendar event is deleted.
    - optionally a **Reference** and a short **Note**.
 
    Everything saves by itself ("Saved ✓" appears on the right).
-3. **Walk-in or phone booking**: click **+ Add walk-in / phone booking**, fill
-   in the time, name, phone, pet, service, amount and payment mode, then
-   **Add booking**. If that time is free, it is taken on the website and added to
+3. **Walk-in or phone booking**: click **+ Add walk-in / phone booking**. The
+   day's studio slots are shown with their state (Free, Booked, Blocked…); tap
+   a free one, or type another time. Fill in the name, phone, pet, service,
+   amount and payment mode, then **Add booking**. If that time is free, it is taken on the website and added to
    the info@ calendar. If it isn't free, the booking is only recorded.
 4. Course payments recorded that day (under Course Applications) are listed at
    the bottom and included in the report.
@@ -179,9 +180,24 @@ reference, e.g. **BRD-0001**. Nothing is booked until you confirm it.
    **Completed** or **Cancelled**, add a short note if useful, and click **Save**.
    Every change is written in the request's history with your email.
 
+**Overnight stays** are priced per dog, per night. In the cart, the quantity is
+the number of **dogs**. At checkout the customer picks a **check-in** and a
+**check-out** date (from today up to 3 months ahead, never on a Thursday). Each dog is
+listed once, and the email and the request show both dates and the number of
+nights.
+
+**Up to 3 dogs per night.** Only **Confirmed** stays count. A night that already
+has 3 confirmed dogs can't be requested on the website. If you confirm a request
+that would put a 4th dog on any night, the panel refuses and names the night:
+change the dates with the customer, or decline it. The card at the top of
+Boarding Requests lists the full nights. To change the limit, set
+`'boarding_dogs_per_night' => 3` in config.php on the server.
+
 In **Website Content CMS → Boarding**, tick **"Needs a trial day first"** on any
 stay that requires a trial day. Customers who haven't done one are charged the
-Trial Day package's price, per dog.
+Trial Day package's price, per dog. **Untick it** (and click Save Live Changes)
+to stop asking about a trial day and stop adding the fee. Also update the
+Boarding page texts that say a trial day is mandatory.
 
 ## Footer (all pages)
 

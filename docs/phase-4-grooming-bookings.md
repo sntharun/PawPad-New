@@ -13,9 +13,9 @@ customer gets a confirmation email from info@pawpad.in, and info@ gets a copy.
 | 7 PM slot | Only services without a haircut or clipping. Never for: Dog Grooming Long Hair with haircut, Cat Hair Cut, Puppy Grooming Long Hair, Matted Dogs, Hygiene Clip |
 | One booking per start time | Enforced by the database, even if two people book the same second |
 | Several pets | Each pet picks its own time |
-| How far ahead | From tomorrow up to 30 days |
+| How far ahead | From today up to 30 days. Today's times can be booked online until 1 hour before they start (`booking_same_day_notice_minutes` in config.php, optional) |
 | Payment | At the studio |
-| Boarding and courses | Still enquiries (no slot) |
+| Boarding and courses | Still enquiries (no slot). Boarding dates can be requested up to 3 months ahead |
 
 A time is shown as free only when it is not booked, not blocked in the admin
 panel, and **there is no event at that time in the info@ calendar**. So if Leena

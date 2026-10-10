@@ -158,7 +158,7 @@ function SlotPicker({ availability, serviceId, value, onChange, excluded, onRetr
               "data-date": day.date,
               title: isClosed ? "Closed on Thursdays" : (free.length === 0 ? "Fully booked" : undefined)
             },
-            React.createElement("span", { className: "d-day" }, d.toLocaleDateString("en-IN", { weekday: "short" })),
+            React.createElement("span", { className: "d-day" }, d.toDateString() === new Date().toDateString() ? "Today" : d.toLocaleDateString("en-IN", { weekday: "short" })),
             React.createElement("strong", { className: "d-num" }, d.getDate()),
             React.createElement("span", { className: "d-mon" }, d.toLocaleDateString("en-IN", { month: "short" })),
             disabled && React.createElement("span", { className: "d-closed" }, isClosed ? "Closed" : "Full")
