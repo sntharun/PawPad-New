@@ -2001,7 +2001,7 @@
   // SMALL CMS BUILDING BLOCKS (sections, fields, editable lists)
   // -------------------------------------------------------------
   const CMS_PAGE_OPTIONS = [
-    ["home", "Home"], ["about", "About"], ["blog", "Blog"], ["grooming", "Grooming"], ["courses", "Courses"],
+    ["home", "Home"], ["about", "About"], ["blog", "Blogs"], ["grooming", "Grooming"], ["courses", "Courses"],
     ["studioSetup", "Studio Setup"], ["boarding", "Boarding"], ["myotherapy", "Myotherapy"], ["contact", "Contact"]
   ];
 

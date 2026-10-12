@@ -5,7 +5,7 @@ const pages = [
   { path: "/index.html", titleContains: "Pawpad" },
   { path: "/about.html", titleContains: "Our Story" },
   { path: "/experience.html", titleContains: "Experience" },
-  { path: "/blog.html", titleContains: "Blog" },
+  { path: "/blog.html", titleContains: "Blogs" },
   { path: "/grooming.html", titleContains: "Grooming" },
   { path: "/courses.html", titleContains: "Courses" },
   { path: "/studio-setup.html", titleContains: "Studio Setup" },
@@ -75,15 +75,20 @@ test.describe("Interactive Features & User Flows", () => {
     await page.goto("/index.html");
     const navLinks = page.locator(".nav-links.desktop-only .nav-link");
     // Pages wait briefly for published content before drawing, so wait for the links.
-    await expect(navLinks).toHaveCount(9); // Home, About, Blog, Grooming, Courses, Studio Setup, Boarding, Myotherapy, Contact
+    await expect(navLinks).toHaveText(["Home", "About", "Grooming", "Courses", "Studio Setup", "Boarding", "Myotherapy", "Blogs", "Contact"]);
     await expect(page.locator('.nav-links.desktop-only a[href="blog.html"]')).toBeVisible();
     await expect(page.locator('.nav-links.desktop-only a[href="experience.html"]')).toHaveCount(0);
+    await expect(page.locator('.site-footer .footer-grid ul a')).toHaveText(["About", "Grooming", "Courses", "Studio Setup", "Boarding", "Myotherapy", "Blogs", "Contact"]);
 
     const studioSetupLink = page.locator('.nav-links.desktop-only a[href="studio-setup.html"]');
     await expect(studioSetupLink).toBeVisible();
     await studioSetupLink.click();
     await expect(page).toHaveURL(/studio-setup\.html/);
     await expect(page.locator("h1")).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.locator(".mobile-links .m-link span:first-child")).toHaveText(["Home", "About", "Grooming", "Courses", "Studio Setup", "Boarding", "Myotherapy", "Blogs", "Contact"]);
   });
 
   test("Cart Drawer opens and supports adding consulting package to cart", async ({ page }) => {
@@ -117,6 +122,8 @@ test.describe("Interactive Features & User Flows", () => {
     await expect(studioFooter).toBeAttached();
     await expect(page.locator('nav.nav-links a[href="../blog.html"]')).toBeAttached();
     await expect(page.locator('.site-footer a[href="../blog.html"]')).toBeAttached();
+    await expect(page.locator('nav.nav-links a')).toHaveText(["About", "Grooming", "Courses", "Studio Setup", "Boarding", "Myotherapy", "Blogs", "Contact"]);
+    await expect(page.locator('.site-footer .footer-grid ul a')).toHaveText(["About", "Grooming", "Courses", "Studio Setup", "Boarding", "Myotherapy", "Blogs", "Contact"]);
   });
 
   test("Studio Setup booking application flow navigates cleanly", async ({ page }) => {

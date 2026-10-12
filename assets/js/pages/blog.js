@@ -1,7 +1,7 @@
 const { useState: useStateBlog, useEffect: useEffectBlog } = React;
 const BLOG_URL = "https://pawpad.in/blog.html";
 const BLOG_NEW_ORIGIN_PATH = "/PawPad-New/";
-const BLOG_DEFAULT_TITLE = "Blog — Conscious Pet Care Insights | Pawpad Bengaluru";
+const BLOG_DEFAULT_TITLE = "Blogs — Conscious Pet Care Insights | Pawpad Bengaluru";
 const BLOG_DEFAULT_DESCRIPTION = "Practical stories and guidance from Pawpad on gentle pet grooming, animal wellbeing, and thoughtful care in Bengaluru.";
 
 function blogIsNewOriginPreview() {

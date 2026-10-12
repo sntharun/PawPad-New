@@ -51,12 +51,12 @@ function CursorTrail() {
 const NAV_ITEMS = [
   { key: "home", label: "Home" },
   { key: "about", label: "About" },
-  { key: "blog", label: "Blog" },
   { key: "grooming", label: "Grooming" },
   { key: "courses", label: "Courses" },
   { key: "studioSetup", label: "Studio Setup" },
   { key: "boarding", label: "Boarding" },
   { key: "myotherapy", label: "Myotherapy" },
+  { key: "blog", label: "Blogs" },
   { key: "contact", label: "Contact" }
 ];
 function TopNav({ route, onBook, onOpenCart }) {
