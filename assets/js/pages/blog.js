@@ -1,7 +1,16 @@
 const { useState: useStateBlog, useEffect: useEffectBlog } = React;
 const BLOG_URL = "https://pawpad.in/blog.html";
+const BLOG_NEW_ORIGIN_PATH = "/PawPad-New/";
 const BLOG_DEFAULT_TITLE = "Blog — Conscious Pet Care Insights | Pawpad Bengaluru";
 const BLOG_DEFAULT_DESCRIPTION = "Practical stories and guidance from Pawpad on gentle pet grooming, animal wellbeing, and thoughtful care in Bengaluru.";
+
+function blogIsNewOriginPreview() {
+  return location.hostname === "sntharun.github.io" && location.pathname.startsWith(BLOG_NEW_ORIGIN_PATH);
+}
+
+function blogPageUrl() {
+  return blogIsNewOriginPreview() ? `${location.origin}${BLOG_NEW_ORIGIN_PATH}blog.html` : BLOG_URL;
+}
 
 function blogSetMeta(selector, attribute, value) {
   const node = document.head.querySelector(selector);
@@ -11,8 +20,9 @@ function blogSetMeta(selector, attribute, value) {
 function blogApplySeo(post, missing, requestedSlug = "") {
   const title = post ? (post.seoTitle || post.title) + " | Pawpad" : BLOG_DEFAULT_TITLE;
   const description = post ? (post.seoDescription || post.summary) : BLOG_DEFAULT_DESCRIPTION;
-  const url = post ? `${BLOG_URL}?post=${encodeURIComponent(post.slug)}` : requestedSlug ? `${BLOG_URL}?post=${encodeURIComponent(requestedSlug)}` : BLOG_URL;
-  const image = post && post.coverUrl ? new URL(post.coverUrl, location.href).href : "https://pawpad.in/assets/img/pawpad/landing-page-cover.png";
+  const baseUrl = blogPageUrl();
+  const url = post ? `${baseUrl}?post=${encodeURIComponent(post.slug)}` : requestedSlug ? `${baseUrl}?post=${encodeURIComponent(requestedSlug)}` : baseUrl;
+  const image = new URL(post && post.coverUrl ? post.coverUrl : "assets/img/pawpad/landing-page-cover.png", location.href).href;
   document.title = title;
   blogSetMeta('meta[name="description"]', "content", description);
   blogSetMeta('meta[property="og:type"]', "content", post ? "article" : "website");
@@ -50,7 +60,8 @@ function blogApplySeo(post, missing, requestedSlug = "") {
     script.textContent = JSON.stringify({
       "@context": "https://schema.org", "@type": "BlogPosting", headline: post.title,
       description, image, mainEntityOfPage: url,
-      datePublished: post.publishedAt, dateModified: post.updatedAt,
+      ...(post.publishedAt ? { datePublished: post.publishedAt } : {}),
+      ...(post.updatedAt ? { dateModified: post.updatedAt } : {}),
       author: { "@type": "Person", name: post.author || "Pawpad" },
       publisher: { "@type": "Organization", name: "Pawpad", url: "https://pawpad.in/" }
     });
@@ -64,10 +75,10 @@ function blogDate(value) {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// The static local server cannot run PHP/MySQL migrations. Preview the same
-// starter articles that the API seeds, but never use them on the public site.
-async function blogLocalSamples() {
-  if (!["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) return [];
+// Preview the same starter articles on local hosting and the new-origin Pages
+// project. Pawpad's production domain always uses only published API posts.
+async function blogPreviewSamples() {
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) && !blogIsNewOriginPreview()) return [];
   try {
     const response = await fetch("api/lib/sample-blog-posts.json", { cache: "no-cache" });
     if (!response.ok) return [];
@@ -96,7 +107,7 @@ function BlogPage() {
     setLoading(true);
     setError("");
     const load = async () => {
-      const samples = await blogLocalSamples();
+      const samples = await blogPreviewSamples();
       if (!live) return;
       const sample = slug ? samples.find((item) => item.slug === slug) : null;
       if (sample) {
@@ -115,13 +126,20 @@ function BlogPage() {
           setPost(result.data.post);
           blogApplySeo(result.data.post, false);
         } else {
-          setPosts(result.data.posts || []);
+          const published = result.data.posts || [];
+          if (blogIsNewOriginPreview()) {
+            const bySlug = new Map(samples.map((item) => [item.slug, item]));
+            published.forEach((item) => bySlug.set(item.slug, item));
+            setPosts([...bySlug.values()]);
+          } else {
+            setPosts(published);
+          }
           blogApplySeo(null, false);
         }
       } else {
-        // A valid 404 means an unpublished or unknown post; never reveal a
-        // local sample over that answer. A 405 is the older API without blogs.
-        if (result.status === 404 || (!sample && (slug || samples.length === 0))) {
+        // The new-origin preview keeps its static samples even while the API
+        // is older or unavailable. Local preview yields to a real API 404.
+        if ((!blogIsNewOriginPreview() && result.status === 404) || (!sample && (slug || samples.length === 0))) {
           setPost(null);
           setError(result.status === 404 ? "This article is not available." : "The blog could not load. Please try again shortly.");
           blogApplySeo(null, result.status === 404, slug);

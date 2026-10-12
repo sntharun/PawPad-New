@@ -12,7 +12,7 @@ Owner or Administrator: Admin → Blog Posts → New article. Write the article 
 
 The first API schema update to version 16 publishes three sample articles from `api/lib/sample-blog-posts.json`, using images already in the public `assets/img/pawpad/` folder. The seed runs once and skips an existing slug, so later Admin edits and unpublishing are preserved. Deploy the API update and matching GitHub Pages files together; a local code change alone does not put these articles on the live site.
 
-For local static hosting (`localhost` or `127.0.0.1`), the Blog page previews those same three sample articles directly from the JSON file when the blog API is unavailable. A successful API response always replaces the preview, including an empty published list; a 404 for an article also takes precedence. This preview is disabled on the public domain, where the API remains the source of truth.
+For local static hosting (`localhost` or `127.0.0.1`), the Blog page previews those same three sample articles directly from the JSON file when the blog API is unavailable. A successful API response replaces the local preview, including an empty published list; a 404 for an article also takes precedence. On `https://sntharun.github.io/PawPad-New/`, the sample articles remain visible as staging content and published API posts are added or replace matching slugs. The live `pawpad.in` domain always uses the API as the source of truth.
 
 The API exposes only published posts through `list_blog_posts` and `get_blog_post`; admin actions require Owner or Administrator. The dynamic sitemap is `https://api.pawpad.in/index.php?action=blog_sitemap`, referenced in the main `robots.txt`. The public `get_content` response does not carry articles.
 

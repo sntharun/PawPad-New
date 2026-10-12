@@ -3,6 +3,28 @@ import { existsSync, readFileSync } from "node:fs";
 
 const samplePosts = JSON.parse(readFileSync("api/lib/sample-blog-posts.json", "utf8"));
 
+for (const apiStatus of [405, 200]) {
+  test(`new-origin Pages shows sample blogs when the API returns ${apiStatus}`, async ({ page }) => {
+    await page.route("https://sntharun.github.io/PawPad-New/**", async (route) => {
+      const path = new URL(route.request().url()).pathname.slice("/PawPad-New/".length);
+      const response = await route.fetch({ url: `http://localhost:3000/${path}` });
+      await route.fulfill({ response });
+    });
+    await page.route("https://api.pawpad.in/**", async (route) => {
+      const action = new URL(route.request().url()).searchParams.get("action");
+      const status = apiStatus === 200 && action === "get_blog_post" ? 404 : apiStatus;
+      const data = status === 200 ? { ok: true, posts: [] } : { ok: false, error: status === 404 ? "Not found" : "Use POST." };
+      await route.fulfill({ status, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(data) });
+    });
+    await page.goto("https://sntharun.github.io/PawPad-New/blog.html");
+    await expect(page.locator(".blog-card")).toHaveCount(samplePosts.length);
+    await page.getByRole("link", { name: new RegExp(samplePosts[0].title) }).click();
+    await expect(page.getByRole("heading", { level: 1, name: samplePosts[0].title })).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://sntharun.github.io/PawPad-New/blog.html?post=${samplePosts[0].slug}`);
+    expect(await page.locator(".blog-cover img").evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
+  });
+}
+
 test("local hosting shows starter blogs when the old API has no blog endpoint", async ({ page }) => {
   await page.route("https://api.pawpad.in/**", async (route) => {
     await route.fulfill({ status: 405, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ ok: false, error: "Use POST." }) });
