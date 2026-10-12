@@ -1339,10 +1339,13 @@
                     { key: p.id, style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", fontSize: "13px", padding: "8px 12px", background: "var(--admin-bg)", borderRadius: "6px", border: "1px solid var(--admin-border-subtle)" } },
                     React.createElement("strong", null, formatRupees(p.amount)),
                     React.createElement("span", null, `${p.paidOn} · ${p.modeLabel}${p.reference ? ` · Ref ${p.reference}` : ""}`),
+                    p.invoiceNo && React.createElement("span", { style: { fontWeight: 600 } }, `Invoice ${p.invoiceNo}`),
+                    p.adjustmentNos?.length > 0 && React.createElement("span", { style: { fontWeight: 600 } }, `Notes ${p.adjustmentNos.join(", ")}`),
                     React.createElement("span", { style: { color: "var(--admin-text-faint)", fontSize: "11px", flex: 1 } }, `recorded by ${p.recordedBy}`),
-                    canAdmin && React.createElement("button", { className: "btn-admin btn-admin-secondary", style: { padding: "3px 8px", fontSize: "11px" }, onClick: () => handleDeletePayment(p) }, "Remove")
+                    canAdmin && !p.invoiceNo && React.createElement("button", { className: "btn-admin btn-admin-secondary", style: { padding: "3px 8px", fontSize: "11px" }, onClick: () => handleDeletePayment(p) }, "Remove")
                   )),
-              (selectedApp.status === "approved" || selectedApp.status === "enrolled") && React.createElement(
+              (selectedApp.status === "approved" || selectedApp.status === "enrolled") && (selectedApp.payments || []).some((p) => p.invoiceNo) && React.createElement("p", { style: { fontSize: "12px", color: "var(--admin-text-muted)" } }, "This course has a final invoice. Record later amount changes and payments in the invoice register using a reviewed debit or credit note."),
+              (selectedApp.status === "approved" || selectedApp.status === "enrolled") && !(selectedApp.payments || []).some((p) => p.invoiceNo) && React.createElement(
                 "div",
                 { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } },
                 React.createElement("input", { className: "input-field", inputMode: "decimal", placeholder: "Amount (₹)", "aria-label": "Payment amount", value: payment.amount, onChange: (e) => setPayment({ ...payment, amount: e.target.value }), style: { width: "130px" } }),
@@ -1967,6 +1970,7 @@
   }
 
   const GroomingImageUploadWidget = ImageUploadWidget;
+  window.PawpadAdminImageUploadWidget = ImageUploadWidget;
 
   // -------------------------------------------------------------
   // REUSABLE CONFIRMATION MODAL (YES / NO)
@@ -1997,7 +2001,7 @@
   // SMALL CMS BUILDING BLOCKS (sections, fields, editable lists)
   // -------------------------------------------------------------
   const CMS_PAGE_OPTIONS = [
-    ["home", "Home"], ["about", "About"], ["experience", "Experience"], ["grooming", "Grooming"], ["courses", "Courses"],
+    ["home", "Home"], ["about", "About"], ["blog", "Blog"], ["grooming", "Grooming"], ["courses", "Courses"],
     ["studioSetup", "Studio Setup"], ["boarding", "Boarding"], ["myotherapy", "Myotherapy"], ["contact", "Contact"]
   ];
 
@@ -5365,21 +5369,21 @@
                     React.createElement("td", { style: { ...cell, minWidth: "190px" } },
                       React.createElement("div", { style: { fontWeight: 600 } }, b.customer.name, b.source === "walkin" ? " · walk-in" : ""),
                       React.createElement("div", null, `${b.pet.name || "Pet"}${b.pet.type ? ` (${b.pet.type})` : ""} — ${b.serviceTitle}`),
-                      React.createElement("div", { style: { fontSize: "11px", color: "var(--admin-text-faint)" } }, `Ref ${b.ref}${b.status === "cancelled" ? " · cancelled in the admin panel" : ""}`)),
+                      React.createElement("div", { style: { fontSize: "11px", color: "var(--admin-text-faint)" } }, `Ref ${b.ref}${b.status === "cancelled" ? " · cancelled in the admin panel" : ""}${b.closing.invoiceNo ? ` · Invoice ${b.closing.invoiceNo}` : ""}${b.closing.adjustmentNos?.length ? ` · Notes ${b.closing.adjustmentNos.join(", ")}` : ""}`)),
                     React.createElement("td", { style: cell },
-                      React.createElement("select", { className: "input-field", style: small, disabled: isFuture, "aria-label": `Status ${b.ref}`, value: f.status, onChange: (e) => change(b.id, { status: e.target.value }, true) },
+                      React.createElement("select", { className: "input-field", style: small, disabled: isFuture || !!b.closing.invoiceNo, "aria-label": `Status ${b.ref}`, value: f.status, onChange: (e) => change(b.id, { status: e.target.value }, true) },
                         React.createElement("option", { value: "" }, "— choose —"),
                         CLOSING_STATUS_OPTIONS.map(([v, l]) => React.createElement("option", { key: v, value: v }, l)))),
                     React.createElement("td", { style: cell },
-                      React.createElement("input", { className: "input-field", style: { ...small, width: "90px" }, disabled: isFuture, inputMode: "decimal", "aria-label": `Amount ${b.ref}`, value: f.amount, onChange: (e) => change(b.id, { amount: e.target.value }) })),
+                      React.createElement("input", { className: "input-field", style: { ...small, width: "90px" }, disabled: isFuture || !!b.closing.invoiceNo, inputMode: "decimal", "aria-label": `Amount ${b.ref}`, value: f.amount, onChange: (e) => change(b.id, { amount: e.target.value }) })),
                     React.createElement("td", { style: cell },
-                      React.createElement("select", { className: "input-field", style: small, disabled: isFuture, "aria-label": `Payment mode ${b.ref}`, value: f.mode, onChange: (e) => change(b.id, { mode: e.target.value }, true) },
+                      React.createElement("select", { className: "input-field", style: small, disabled: isFuture || !!b.closing.invoiceNo, "aria-label": `Payment mode ${b.ref}`, value: f.mode, onChange: (e) => change(b.id, { mode: e.target.value }, true) },
                         React.createElement("option", { value: "" }, "— choose —"),
                         CLOSING_MODE_OPTIONS.map(([v, l]) => React.createElement("option", { key: v, value: v }, l)))),
                     React.createElement("td", { style: cell },
-                      React.createElement("input", { className: "input-field", style: { ...small, width: "110px" }, disabled: isFuture, "aria-label": `Reference ${b.ref}`, placeholder: "UTR / receipt", value: f.reference, onChange: (e) => change(b.id, { reference: e.target.value }) })),
+                      React.createElement("input", { className: "input-field", style: { ...small, width: "110px" }, disabled: isFuture || !!b.closing.invoiceNo, "aria-label": `Reference ${b.ref}`, placeholder: "UTR / receipt", value: f.reference, onChange: (e) => change(b.id, { reference: e.target.value }) })),
                     React.createElement("td", { style: cell },
-                      React.createElement("input", { className: "input-field", style: { ...small, width: "140px" }, disabled: isFuture, "aria-label": `Note ${b.ref}`, value: f.note, onChange: (e) => change(b.id, { note: e.target.value }) })),
+                      React.createElement("input", { className: "input-field", style: { ...small, width: "140px" }, disabled: isFuture || !!b.closing.invoiceNo, "aria-label": `Note ${b.ref}`, value: f.note, onChange: (e) => change(b.id, { note: e.target.value }) })),
                     React.createElement("td", { style: { ...cell, fontSize: "11px", whiteSpace: "nowrap", color: st && st.startsWith("⚠️") ? "var(--admin-danger)" : "var(--admin-text-faint)" }, "data-save-state": st || "" },
                       st === "saving" ? "Saving…" : st === "saved" ? "Saved ✓" : st || "")
                   );
@@ -5405,7 +5409,7 @@
         (day.coursePayments || []).length === 0
           ? React.createElement("p", { style: { fontSize: "13px", color: "var(--admin-text-muted)" } }, "None. (Course payments are recorded under Course Applications.)")
           : day.coursePayments.map((p) => React.createElement("p", { key: p.id, style: { fontSize: "13px" } },
-              `${p.applicationId} · ${p.candidate || "(application deleted)"} · ${formatRupees(p.amount)} · ${p.modeLabel}${p.reference ? ` · Ref ${p.reference}` : ""} · by ${p.recordedBy}`))
+              `${p.applicationId} · ${p.candidate || "(application deleted)"} · ${formatRupees(p.amount)} · ${p.modeLabel}${p.reference ? ` · Ref ${p.reference}` : ""}${p.invoiceNo ? ` · Invoice ${p.invoiceNo}` : ""}${p.adjustmentNos?.length ? ` · Notes ${p.adjustmentNos.join(", ")}` : ""} · by ${p.recordedBy}`))
       )
     );
   }
@@ -5857,7 +5861,7 @@
         ),
         isPrimaryOwner ? React.createElement("p", { style: { color: "var(--admin-text-muted)", fontSize: "13px", marginBottom: "16px" } },
           "Manage who can sign in. Add a person with a starting password (at least 10 characters) and give it to them in person; they can change it after signing in. ",
-          "An Administrator can do everything. A Manager only sees Upcoming Grooming, Grooming Bookings, Course Applications and Today's Closing: they can cancel and reschedule bookings, schedule interviews, record payments, enrol, and send the daily report, but cannot block times, delete, edit the website or see the team."
+          "An Administrator can do everything. A Manager handles bookings, course applications, daily closing, and invoice issuance. Managers cannot change billing settings, record invoice corrections, edit the website, or manage the team."
         ) : React.createElement("p", { style: { color: "var(--admin-text-muted)", fontSize: "13px", marginBottom: "16px" } },
           "View authorized administrator team members."
         ),
@@ -6210,6 +6214,8 @@
       { id: "applications", label: "Course Applications", icon: Icons.Applications, badge: applicationsBadge || null,
         badgeTitle: canAdmin ? "Pending Admin Approval" : "Approved – awaiting payment" },
       canAdmin && { id: "content", label: "Website Content CMS", icon: Icons.Content },
+      canAdmin && { id: "blog", label: "Blog Posts", icon: Icons.Content },
+      { id: "invoices", label: "Invoices", icon: Icons.Applications },
       canAdmin && { id: "media", label: "WebP Media Manager", icon: Icons.Media },
       { id: "settings", label: canAdmin ? "Settings & Backups" : "My Account", icon: Icons.Settings }
     ].filter(Boolean);
@@ -6363,6 +6369,8 @@
               shownTab === "bookings" && "Grooming Bookings",
               shownTab === "applications" && "Course Applications & Admissions",
               shownTab === "content" && "Omnichannel Content Management",
+              shownTab === "blog" && "Blog Posts & SEO",
+              shownTab === "invoices" && "Invoice Register",
               shownTab === "media" && "Media Manager & WebP Optimization",
               shownTab === "closing" && "Today's Closing",
               shownTab === "boarding" && "Boarding Requests",
@@ -6376,6 +6384,8 @@
               shownTab === "bookings" && "Bookings by day, cancellations and blocked times (synced with the info@ calendar)",
               shownTab === "applications" && "Review candidate responses and manage course approval lifecycle",
               shownTab === "content" && "Live updates to text, headlines, pricing, and packages",
+              shownTab === "blog" && "Write, preview, and publish stories with images and SEO fields",
+              shownTab === "invoices" && "Link verified payments, prepare sales, and issue numbered invoices",
               shownTab === "media" && "Automated compression to WebP and live asset slot replacement",
               shownTab === "closing" && "Status and payment of every booking of the day, walk-ins, and the daily report email",
               shownTab === "boarding" && "Boarding stays requested at the website checkout — confirm, decline or complete them here",
@@ -6426,6 +6436,8 @@
           shownTab === "closures" && React.createElement(ClosuresTab, null),
           shownTab === "applications" && React.createElement(ApplicationsTab, { applications, onUpdate: refreshData, canAdmin }),
           shownTab === "content" && React.createElement(ContentEditorTab, null),
+          shownTab === "blog" && React.createElement(window.PawpadBlogAdminTab, null),
+          shownTab === "invoices" && React.createElement(window.PawpadInvoiceAdminTab, { canAdmin }),
           shownTab === "media" && React.createElement(MediaManagerTab, null),
           shownTab === "settings" && React.createElement(SettingsTab, { currentUser })
         )

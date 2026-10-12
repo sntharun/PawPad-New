@@ -117,6 +117,8 @@ function payment_to_array(array $row): array
         'mode' => $row['mode'],
         'modeLabel' => PAYMENT_MODES[$row['mode']] ?? $row['mode'],
         'reference' => $row['reference'],
+        'invoiceNo' => $row['invoice_no'] ?? '',
+        'adjustmentNos' => $row['adjustment_nos'] ?? [],
         'recordedBy' => $row['recorded_by'],
         'createdAt' => to_iso($row['created_at']),
     ];
@@ -126,13 +128,16 @@ function payment_to_array(array $row): array
 function payments_by_application(?string $id = null): array
 {
     if ($id === null) {
-        $stmt = db()->query('SELECT * FROM course_payments ORDER BY paid_on, id');
+        $stmt = db()->query("SELECT p.*, s.id AS invoice_sale_id, s.issued_no AS invoice_no FROM course_payments p LEFT JOIN invoice_source_links l ON l.kind='course' AND l.source_id=p.id LEFT JOIN invoice_sales s ON s.id=l.sale_id ORDER BY p.paid_on, p.id");
     } else {
-        $stmt = db()->prepare('SELECT * FROM course_payments WHERE application_id = ? ORDER BY paid_on, id');
+        $stmt = db()->prepare("SELECT p.*, s.id AS invoice_sale_id, s.issued_no AS invoice_no FROM course_payments p LEFT JOIN invoice_source_links l ON l.kind='course' AND l.source_id=p.id LEFT JOIN invoice_sales s ON s.id=l.sale_id WHERE p.application_id = ? ORDER BY p.paid_on, p.id");
         $stmt->execute([$id]);
     }
     $byApp = [];
-    foreach ($stmt->fetchAll() as $row) {
+    $rows = $stmt->fetchAll();
+    $noteNumbers = invoice_adjustment_numbers(array_column($rows, 'invoice_sale_id'));
+    foreach ($rows as $row) {
+        $row['adjustment_nos'] = $noteNumbers[(int) ($row['invoice_sale_id'] ?? 0)] ?? [];
         $byApp[$row['application_id']][] = payment_to_array($row);
     }
     return $byApp;
@@ -439,6 +444,9 @@ function delete_applications(array $input): array
         json_error('No applications selected.');
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $paymentCheck = db()->prepare("SELECT COUNT(*) FROM course_payments WHERE application_id IN ($placeholders)");
+    $paymentCheck->execute($ids);
+    if ((int) $paymentCheck->fetchColumn() > 0) json_error('Applications with recorded payments cannot be deleted. Keep the payment and invoice audit trail.', 409);
     $stmt = db()->prepare("DELETE FROM applications WHERE id IN ($placeholders)");
     $stmt->execute($ids);
     return ['deleted' => $stmt->rowCount()];
@@ -472,6 +480,12 @@ function record_payment(array $admin, array $input): array
 
     $pdo = db();
     $pdo->beginTransaction();
+    $lock = $pdo->prepare('SELECT status FROM applications WHERE id=? FOR UPDATE');
+    $lock->execute([$row['id']]);
+    if (!in_array($lock->fetchColumn(), ['approved', 'enrolled'], true)) json_error('This application is no longer ready for a payment.', 409);
+    $invoice = $pdo->prepare("SELECT s.status FROM invoice_source_links l JOIN course_payments p ON p.id=l.source_id JOIN invoice_sales s ON s.id=l.sale_id WHERE l.kind='course' AND p.application_id=? LIMIT 1");
+    $invoice->execute([$row['id']]);
+    if ($invoice->fetchColumn() === 'issued') json_error('This course already has a final invoice. Use a reviewed debit note and record the additional payment in the invoice register.', 409);
     $pdo->prepare('INSERT INTO course_payments (application_id, amount, paid_on, mode, reference, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
         ->execute([$row['id'], $amount, $paidOn, $mode, $reference, $admin['email'], $now]);
     $notes = decode_list($row['staff_notes']);
@@ -490,11 +504,16 @@ function record_payment(array $admin, array $input): array
 /** Owner/Administrator: removes a payment recorded by mistake. */
 function delete_payment(array $admin, array $input): array
 {
-    $stmt = db()->prepare('SELECT * FROM course_payments WHERE id = ?');
+    $pdo = db();
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare('SELECT * FROM course_payments WHERE id = ? FOR UPDATE');
     $stmt->execute([(int) ($input['id'] ?? 0)]);
     $payment = $stmt->fetch();
     if (!$payment) {
         json_error('Payment not found.', 404);
+    }
+    if (invoice_source_issued('course', (int) $payment['id'])) {
+        json_error('This payment belongs to an issued invoice and cannot be deleted. Record an audited correction instead.', 409);
     }
     $row = find_application($payment['application_id']);
     $now = now_utc();
@@ -504,8 +523,6 @@ function delete_payment(array $admin, array $input): array
         'date' => to_iso($now),
         'text' => 'Payment removed: ' . format_rupees((float) $payment['amount']) . ' of ' . $payment['paid_on'] . ' (' . (PAYMENT_MODES[$payment['mode']] ?? $payment['mode']) . ').',
     ];
-    $pdo = db();
-    $pdo->beginTransaction();
     $pdo->prepare('DELETE FROM course_payments WHERE id = ?')->execute([$payment['id']]);
     $pdo->prepare('UPDATE applications SET staff_notes = ?, updated_at = ? WHERE id = ?')
         ->execute([encode_json($notes), $now, $row['id']]);

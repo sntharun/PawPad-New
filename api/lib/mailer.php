@@ -175,3 +175,33 @@ function send_candidate_email(string $toEmail, string $toName, string $subject, 
 {
     return send_mail('courses', $toEmail, $toName, $subject, $body);
 }
+
+/** Sends an already-issued invoice from info@. A failed send never changes its number or PDF. */
+function send_invoice_attachment(string $toEmail, string $toName, string $number, string $pdfPath, string $document = 'invoice'): array
+{
+    if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) return ['sent' => false, 'error' => 'There is no valid customer email address.'];
+    if (!mail_configured('info')) return ['sent' => false, 'error' => 'The info@ SMTP mailbox is not configured.'];
+    $a = mail_account('info');
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = $a['host']; $mail->Port = $a['port']; $mail->SMTPAuth = true;
+        $mail->Username = $a['user']; $mail->Password = $a['password'];
+        if ($a['secure'] === 'tls') $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        elseif ($a['secure'] === 'ssl') $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        else { $mail->SMTPSecure = ''; $mail->SMTPAutoTLS = false; }
+        $mail->Timeout = 20; $mail->CharSet = PHPMailer::CHARSET_UTF8;
+        $mail->setFrom($a['from'], $a['from_name']);
+        $mail->addReplyTo($a['from'], $a['from_name']);
+        $mail->addAddress($toEmail, $toName);
+        $mail->Subject = 'Your Pawpad ' . $document . ' ' . $number;
+        $mail->isHTML(false);
+        $mail->Body = "Hello {$toName},\n\nAttached is your Pawpad {$document} {$number}. Please reply to this email if you have any questions.\n\nPawpad Team";
+        $mail->addAttachment($pdfPath, preg_replace('/[^A-Za-z0-9_.-]/', '-', $number) . '.pdf', 'base64', 'application/pdf');
+        $mail->send();
+        return ['sent' => true, 'error' => ''];
+    } catch (Throwable $e) {
+        error_log('Pawpad invoice email failed: ' . $mail->ErrorInfo);
+        return ['sent' => false, 'error' => 'The mail server refused the invoice email. Retry from the invoice register.'];
+    }
+}

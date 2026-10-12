@@ -275,7 +275,9 @@ function list_boarding_requests(): array
 /** Staff: change the status and/or add a note; both are logged with who did it. */
 function update_boarding_request(array $admin, array $input): array
 {
-    $stmt = db()->prepare('SELECT * FROM boarding_requests WHERE id = ?');
+    $pdo = db();
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare('SELECT * FROM boarding_requests WHERE id = ? FOR UPDATE');
     $stmt->execute([(int) ($input['id'] ?? 0)]);
     $row = $stmt->fetch();
     if (!$row) {
@@ -284,6 +286,9 @@ function update_boarding_request(array $admin, array $input): array
     $status = (string) ($input['status'] ?? $row['status']);
     if (!isset(BOARDING_STATUSES[$status])) {
         json_error('Unknown status.');
+    }
+    if (in_array($status, ['declined', 'cancelled'], true) && invoice_source_issued('boarding', (int) $row['id'])) {
+        json_error('This boarding stay belongs to an issued invoice. Record an audited correction before changing its financial status.', 409);
     }
     $note = clean_text($input['note'] ?? '', 1000);
     // Confirming a stay must not take any night over the limit.
@@ -302,8 +307,9 @@ function update_boarding_request(array $admin, array $input): array
     if ($note !== '') {
         $log[] = ['date' => $now, 'by' => $admin['email'], 'text' => $note];
     }
-    db()->prepare('UPDATE boarding_requests SET status = ?, admin_log = ?, updated_at = ? WHERE id = ?')
+    $pdo->prepare('UPDATE boarding_requests SET status = ?, admin_log = ?, updated_at = ? WHERE id = ?')
         ->execute([$status, json_encode($log, JSON_UNESCAPED_UNICODE), now_utc(), $row['id']]);
+    $pdo->commit();
     $stmt->execute([$row['id']]);
     return ['request' => boarding_to_array($stmt->fetch())];
 }

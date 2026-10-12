@@ -5,3 +5,4 @@ Disallow: /admin.html
 Disallow: /assets/js/admin.js
 
 Sitemap: https://pawpad.in/sitemap.xml
+Sitemap: https://api.pawpad.in/index.php?action=blog_sitemap

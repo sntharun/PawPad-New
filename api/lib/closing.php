@@ -42,13 +42,28 @@ function closing_date(array $input, bool $allowFuture = false): DateTimeImmutabl
 function closing_rows(string $date): array
 {
     $stmt = db()->prepare(
-        'SELECT b.*, c.status AS c_status, c.amount AS c_amount, c.mode AS c_mode, c.reference AS c_reference,
-                c.note AS c_note, c.updated_by AS c_updated_by, c.updated_at AS c_updated_at
+        "SELECT b.*, c.status AS c_status, c.amount AS c_amount, c.mode AS c_mode, c.reference AS c_reference,
+                c.note AS c_note, c.updated_by AS c_updated_by, c.updated_at AS c_updated_at, s.id AS invoice_sale_id, s.issued_no AS invoice_no
          FROM bookings b LEFT JOIN booking_closing c ON c.booking_id = b.id
-         WHERE b.slot_date = ? ORDER BY b.slot_time, b.id'
+         LEFT JOIN invoice_source_links l ON l.kind = 'grooming' AND l.source_id = b.id
+         LEFT JOIN invoice_sales s ON s.id = l.sale_id
+         WHERE b.slot_date = ? ORDER BY b.slot_time, b.id"
     );
     $stmt->execute([$date]);
-    return array_map(function (array $row): array {
+    $rows = $stmt->fetchAll();
+    $groupInvoices = [];
+    foreach ($rows as $row) {
+        if ($row['invoice_no']) $groupInvoices[$row['ref']] = ['number' => $row['invoice_no'], 'saleId' => $row['invoice_sale_id']];
+    }
+    foreach ($rows as &$row) {
+        if (!$row['invoice_no'] && isset($groupInvoices[$row['ref']])) {
+            $row['invoice_no'] = $groupInvoices[$row['ref']]['number'];
+            $row['invoice_sale_id'] = $groupInvoices[$row['ref']]['saleId'];
+        }
+    }
+    unset($row);
+    $noteNumbers = invoice_adjustment_numbers(array_column($rows, 'invoice_sale_id'));
+    return array_map(function (array $row) use ($noteNumbers): array {
         $b = booking_to_array($row);
         $saved = $row['c_updated_at'] !== null;
         $b['closing'] = [
@@ -60,25 +75,32 @@ function closing_rows(string $date): array
             'note' => $saved ? $row['c_note'] : '',
             'updatedBy' => $saved ? $row['c_updated_by'] : '',
             'updatedAt' => $saved ? to_iso($row['c_updated_at']) : null,
+            'invoiceNo' => $row['invoice_no'] ?? '',
+            'adjustmentNos' => $noteNumbers[(int) ($row['invoice_sale_id'] ?? 0)] ?? [],
         ];
         return $b;
-    }, $stmt->fetchAll());
+    }, $rows);
 }
 
 function course_payments_on(string $date): array
 {
     $stmt = db()->prepare(
-        'SELECT p.*, a.applicant_name, a.course_name FROM course_payments p
-         LEFT JOIN applications a ON a.id = p.application_id WHERE p.paid_on = ? ORDER BY p.id'
+        "SELECT p.*, a.applicant_name, a.course_name, s.id AS invoice_sale_id, s.issued_no AS invoice_no FROM course_payments p
+         LEFT JOIN applications a ON a.id = p.application_id
+         LEFT JOIN invoice_source_links l ON l.kind='course' AND l.source_id=p.id
+         LEFT JOIN invoice_sales s ON s.id=l.sale_id WHERE p.paid_on = ? ORDER BY p.id"
     );
     $stmt->execute([$date]);
-    return array_map(function (array $row): array {
+    $rows = $stmt->fetchAll();
+    $noteNumbers = invoice_adjustment_numbers(array_column($rows, 'invoice_sale_id'));
+    return array_map(function (array $row) use ($noteNumbers): array {
+        $row['adjustment_nos'] = $noteNumbers[(int) ($row['invoice_sale_id'] ?? 0)] ?? [];
         return payment_to_array($row) + [
             'applicationId' => $row['application_id'],
             'candidate' => (string) ($row['applicant_name'] ?? ''),
             'course' => (string) ($row['course_name'] ?? ''),
         ];
-    }, $stmt->fetchAll());
+    }, $rows);
 }
 
 function closing_totals(array $rows, array $coursePayments): array
@@ -211,11 +233,21 @@ function save_closing(array $admin, array $input): array
     }
     $reference = clean_text(str_replace(["\r", "\n"], ' ', (string) ($input['reference'] ?? '')), 120);
     $note = clean_text(str_replace(["\r", "\n"], ' ', (string) ($input['note'] ?? '')), 500);
-    db()->prepare(
+    $pdo = db();
+    $pdo->beginTransaction();
+    $bookingLock = $pdo->prepare('SELECT id FROM bookings WHERE id=? FOR UPDATE');
+    $bookingLock->execute([$booking['id']]); $bookingLock->fetch();
+    $lock = $pdo->prepare('SELECT booking_id FROM booking_closing WHERE booking_id=? FOR UPDATE');
+    $lock->execute([$booking['id']]);
+    if (invoice_source_issued('grooming', (int) $booking['id'])) {
+        json_error('This closing belongs to an issued invoice and cannot be changed. Record an audited correction instead.', 409);
+    }
+    $pdo->prepare(
         'INSERT INTO booking_closing (booking_id, status, amount, mode, reference, note, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE status = VALUES(status), amount = VALUES(amount), mode = VALUES(mode), reference = VALUES(reference),
             note = VALUES(note), updated_by = VALUES(updated_by), updated_at = VALUES(updated_at)'
     )->execute([$booking['id'], $status, $amount, $mode, $reference, $note, $admin['email'], now_utc()]);
+    $pdo->commit();
 
     foreach (closing_rows($booking['slot_date']) as $row) {
         if ($row['id'] === (int) $booking['id']) {

@@ -14,8 +14,8 @@ if (!defined('PAWPAD_API')) {
 const MIN_PASSWORD_LENGTH = 10;
 
 // Who may do what. Owner and Administrator can do everything (only the owner
-// manages the team); a Manager only handles bookings, applications and the
-// daily closing.
+// manages the team); a Manager handles bookings, applications, daily closing,
+// and invoice issuance, but not billing configuration or corrections.
 const ADMIN_ROLES = ['owner', 'admin'];
 const STAFF_ROLES = ['owner', 'admin', 'manager'];
 

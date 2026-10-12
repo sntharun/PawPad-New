@@ -2,20 +2,28 @@
 /**
  * Pawpad API — https://api.pawpad.in/index.php?action=<name>
  *
- * Public:  health (GET), get_content (GET or POST), submit_application,
+ * Public:  health (GET), get_content (GET or POST), list_blog_posts, get_blog_post,
+ *          blog_sitemap (GET), submit_application,
  *          booking_availability (GET or POST), create_booking, boarding_availability, create_boarding_request
  * Staff (Owner, Administrator and Manager):
  *          login, logout, me, change_password,
  *          list_bookings, list_upcoming_bookings, cancel_booking, reschedule_booking,
  *          list_applications, update_application (Manager: interviews, notes, enrol only),
  *          record_payment, closing_day, save_closing, add_walkin, preview_report, send_report,
- *          list_boarding_requests, update_boarding_request
+ *          list_boarding_requests, update_boarding_request,
+ *          list_invoice_sales, get_invoice_sale, list_invoice_sources,
+ *          save_invoice_sale, issue_invoice, send_invoice, get_invoice_pdf,
+ *          get_invoice_adjustment_pdf, preview_invoice_adjustment
  * Owner and Administrator only:
  *          cleanup_calendar, block_slot, unblock_slot,
  *          closure_preview, create_closure, list_closures, delete_closure,
  *          delete_applications, delete_payment, list_daily_reports, get_daily_report,
  *          save_content, upload_file, list_uploads, delete_upload, convert_uploads,
- *          list_admins, add_admin, remove_admin (owner only: add/remove)
+ *          get/save/approve_invoice_settings, record_invoice_correction,
+ *          save/issue/send_invoice_adjustment, record_invoice_refund,
+ *          record_invoice_adjustment_collection,
+ *          set_invoice_delivery_email, save/publish/unpublish_blog_post,
+ *          list_blog_admin, get_blog_admin, list_admins, add_admin, remove_admin (owner only: add/remove)
  * Staff actions need the X-Pawpad-Token header returned by "login". The role
  * is checked here on the server, so a hidden button can't be worked around.
  */
@@ -30,6 +38,7 @@ require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/admins.php';
 require __DIR__ . '/lib/applications.php';
 require __DIR__ . '/lib/content.php';
+require __DIR__ . '/lib/blog.php';
 require __DIR__ . '/lib/uploads.php';
 require __DIR__ . '/lib/mailer.php';
 require __DIR__ . '/lib/caldav.php';
@@ -37,6 +46,8 @@ require __DIR__ . '/lib/bookings.php';
 require __DIR__ . '/lib/closures.php';
 require __DIR__ . '/lib/closing.php';
 require __DIR__ . '/lib/boarding.php';
+require __DIR__ . '/lib/invoices.php';
+require __DIR__ . '/lib/invoice-adjustments.php';
 
 apply_security_headers();
 apply_cors();
@@ -60,8 +71,11 @@ if ($action === 'health') {
         'calendar' => caldav_configured(),
     ]);
 }
+if ($action === 'blog_sitemap' && $method === 'GET') {
+    send_blog_sitemap();
+}
 // Public reads may use a plain GET (no CORS preflight for visitors).
-$publicGet = ['get_content', 'booking_availability'];
+$publicGet = ['get_content', 'booking_availability', 'list_blog_posts', 'get_blog_post'];
 if ($method !== 'POST' && !($method === 'GET' && in_array($action, $publicGet, true))) {
     json_error('Use POST.', 405);
 }
@@ -74,6 +88,12 @@ try {
         // --- Public -------------------------------------------------------
         case 'get_content':
             send_json(['ok' => true] + get_content());
+            break;
+        case 'list_blog_posts':
+            send_json(['ok' => true] + list_blog_posts());
+            break;
+        case 'get_blog_post':
+            send_json(['ok' => true] + get_blog_post($method === 'GET' ? $_GET : $input));
             break;
         case 'submit_application':
             send_json(['ok' => true] + submit_application($input), 201);
@@ -151,6 +171,39 @@ try {
         case 'send_report':
             send_json(['ok' => true] + send_report(require_role(STAFF_ROLES), $input));
             break;
+        case 'list_invoice_sales':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true] + list_invoice_sales($input));
+            break;
+        case 'get_invoice_sale':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true, 'sale' => invoice_sale((int) ($input['id'] ?? 0))]);
+            break;
+        case 'list_invoice_sources':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true] + list_invoice_sources());
+            break;
+        case 'save_invoice_sale':
+            send_json(['ok' => true] + save_invoice_sale(require_role(STAFF_ROLES), $input));
+            break;
+        case 'issue_invoice':
+            send_json(['ok' => true] + issue_invoice(require_role(STAFF_ROLES), $input));
+            break;
+        case 'send_invoice':
+            send_json(['ok' => true] + send_invoice(require_role(STAFF_ROLES), $input));
+            break;
+        case 'get_invoice_pdf':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true] + invoice_pdf($input));
+            break;
+        case 'get_invoice_adjustment_pdf':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true] + invoice_adjustment_pdf($input));
+            break;
+        case 'preview_invoice_adjustment':
+            require_role(STAFF_ROLES);
+            send_json(['ok' => true] + preview_invoice_adjustment($input));
+            break;
 
         // --- Owner and Administrator only ---------------------------------
         case 'delete_applications':
@@ -196,6 +249,54 @@ try {
             break;
         case 'save_content':
             send_json(['ok' => true] + save_content(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'get_invoice_settings':
+            require_role(ADMIN_ROLES);
+            send_json(['ok' => true, 'settings' => invoice_settings()]);
+            break;
+        case 'save_invoice_settings':
+            send_json(['ok' => true] + save_invoice_settings(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'approve_invoice_settings':
+            send_json(['ok' => true] + approve_invoice_settings(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'record_invoice_correction':
+            send_json(['ok' => true] + record_invoice_correction(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'save_invoice_adjustment':
+            send_json(['ok' => true] + save_invoice_adjustment(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'issue_invoice_adjustment':
+            send_json(['ok' => true] + issue_invoice_adjustment(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'send_invoice_adjustment':
+            send_json(['ok' => true] + send_invoice_adjustment(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'record_invoice_refund':
+            send_json(['ok' => true] + record_invoice_refund(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'record_invoice_adjustment_collection':
+            send_json(['ok' => true] + record_invoice_adjustment_collection(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'set_invoice_delivery_email':
+            send_json(['ok' => true] + set_invoice_delivery_email(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'list_blog_admin':
+            require_role(ADMIN_ROLES);
+            send_json(['ok' => true] + list_blog_posts(true));
+            break;
+        case 'get_blog_admin':
+            require_role(ADMIN_ROLES);
+            send_json(['ok' => true] + get_blog_post($input, true));
+            break;
+        case 'save_blog_post':
+            send_json(['ok' => true] + save_blog_post(require_role(ADMIN_ROLES), $input));
+            break;
+        case 'publish_blog_post':
+            send_json(['ok' => true] + publish_blog_post(require_role(ADMIN_ROLES), $input, true));
+            break;
+        case 'unpublish_blog_post':
+            send_json(['ok' => true] + publish_blog_post(require_role(ADMIN_ROLES), $input, false));
             break;
         case 'upload_file':
             send_json(['ok' => true] + upload_file(require_role(ADMIN_ROLES), $input), 201);

@@ -63,6 +63,25 @@
     }
   }
 
+  async function publicGet(action, params) {
+    const base = window.PAWPAD_API_BASE !== undefined ? window.PAWPAD_API_BASE : API_BASE;
+    if (!base) return { ok: false, status: 0, data: {}, networkError: true };
+    const query = new URLSearchParams({ action, ...(params || {}) });
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+    try {
+      const res = await fetch(`${base.replace(/\/$/, "")}/index.php?${query}`, {
+        cache: "no-cache", signal: controller ? controller.signal : undefined
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok && data.ok === true, status: res.status, data, networkError: false };
+    } catch (err) {
+      return { ok: false, status: 0, data: {}, networkError: true };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   window.PawpadApi = {
     isEnabled() {
       const base = window.PAWPAD_API_BASE !== undefined ? window.PAWPAD_API_BASE : API_BASE;
@@ -72,6 +91,8 @@
       return Boolean(getToken());
     },
     call,
+    getBlogPosts() { return publicGet("list_blog_posts"); },
+    getBlogPost(slug) { return publicGet("get_blog_post", { slug }); },
     async login(email, password) {
       const result = await call("login", { email, password });
       if (result.ok && result.data.token) setToken(result.data.token);

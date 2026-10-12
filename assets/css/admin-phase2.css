@@ -1,0 +1,9 @@
+.phase2-grid { display: grid; grid-template-columns: minmax(210px, 285px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.phase2-form { display: flex; flex-direction: column; gap: 15px; }
+.phase2-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--admin-text-muted); }
+.phase2-field input, .phase2-field textarea, .phase2-field select { width: 100%; }
+.phase2-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.phase2-row > * { flex: 1 1 140px; }
+.phase2-panel { border: 1px solid var(--admin-border); border-radius: 12px; padding: 16px; }
+.phase2-keywords { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+@media (max-width: 760px) { .phase2-grid, .phase2-keywords { grid-template-columns: 1fr; } }

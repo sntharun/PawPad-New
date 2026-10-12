@@ -1,0 +1,26 @@
+.blog-hero { padding: 190px 0 74px; background: var(--cream-bg); }
+.blog-hero .lead { max-width: 62ch; margin-top: 24px; }
+.blog-list { padding: 28px 0 var(--pad-section); }
+.blog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px; }
+.blog-card { display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--white); border: 1px solid var(--champagne); transition: transform .25s var(--ease), box-shadow .25s var(--ease); }
+.blog-card:hover { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(46,46,46,.09); }
+.blog-card-image { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--eagle-soft); }
+.blog-card-copy { display: flex; flex-direction: column; gap: 12px; padding: 26px; flex: 1; }
+.blog-card-copy h2 { font-family: var(--f-display); font-size: clamp(26px, 2.6vw, 34px); line-height: 1.18; }
+.blog-card-copy p { color: var(--ink-mute); font-size: 15px; }
+.blog-card-copy .blog-read { color: var(--driftwood-deep); font-size: 13px; font-weight: 700; margin-top: auto; padding-top: 14px; }
+.blog-empty { padding: 40px; border-radius: 20px; background: var(--champagne-soft); color: var(--ink-soft); }
+.blog-article { padding: 190px 0 var(--pad-section); }
+.blog-article-inner { max-width: 900px; margin: 0 auto; }
+.blog-back { display: inline-flex; color: var(--driftwood-deep); font-size: 14px; font-weight: 700; margin-bottom: 32px; }
+.blog-byline { margin: 22px 0 36px; font-size: 14px; color: var(--ink-mute); }
+.blog-cover { margin: 0 0 50px; }
+.blog-cover img, .blog-section figure img { width: 100%; border-radius: 22px; object-fit: cover; }
+.blog-cover figcaption, .blog-section figcaption { color: var(--ink-mute); font-size: 13px; margin-top: 12px; }
+.blog-article .blog-summary { font-size: clamp(19px, 2.4vw, 24px); line-height: 1.55; color: var(--ink-soft); margin: 0 0 50px; }
+.blog-section { margin: 0 0 42px; }
+.blog-section h2 { font-family: var(--f-display); font-size: clamp(30px, 4vw, 44px); line-height: 1.2; margin-bottom: 16px; }
+.blog-section p { margin: 0 0 18px; font-size: 17px; line-height: 1.8; }
+.blog-section figure { margin: 30px 0; }
+@media (max-width: 900px) { .blog-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 650px) { .blog-hero, .blog-article { padding-top: 160px; } .blog-grid { grid-template-columns: 1fr; } .blog-card-copy { padding: 22px; } }

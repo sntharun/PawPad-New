@@ -4,6 +4,7 @@ const ROUTE_HREF = {
   home: "index.html",
   about: "about.html",
   experience: "experience.html",
+  blog: "blog.html",
   grooming: "grooming.html",
   courses: "courses.html",
   studioSetup: "studio-setup.html",
@@ -50,7 +51,7 @@ function CursorTrail() {
 const NAV_ITEMS = [
   { key: "home", label: "Home" },
   { key: "about", label: "About" },
-  { key: "experience", label: "Experience" },
+  { key: "blog", label: "Blog" },
   { key: "grooming", label: "Grooming" },
   { key: "courses", label: "Courses" },
   { key: "studioSetup", label: "Studio Setup" },

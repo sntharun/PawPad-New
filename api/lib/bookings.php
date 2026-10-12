@@ -661,6 +661,7 @@ function booking_change_email(array $row, string $subject, string $intro, string
 function cancel_booking(array $admin, array $input): array
 {
     $row = find_booking((int) ($input['id'] ?? 0));
+    if (invoice_source_issued('grooming', (int) $row['id'])) json_error('This booking has an issued invoice. Record an audited correction instead of cancelling it.', 409);
     if ($row['status'] !== 'booked') {
         json_error('This booking is already cancelled.');
     }
@@ -689,6 +690,7 @@ function cancel_booking(array $admin, array $input): array
 function reschedule_booking(array $admin, array $input): array
 {
     $row = find_booking((int) ($input['id'] ?? 0));
+    if (invoice_source_issued('grooming', (int) $row['id'])) json_error('This booking has an issued invoice and cannot be rescheduled.', 409);
     if ($row['status'] !== 'booked') {
         json_error('Only active bookings can be rescheduled.');
     }

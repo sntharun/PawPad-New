@@ -16,7 +16,7 @@ live in the visitor's browser, all seven pages at once, on a single hash-routed
 (`#/about`) `index.html`. This version:
 
 - Is a real multi-page site — `index.html`, `about.html`, `experience.html`,
-  `grooming.html`, `courses.html`, `boarding.html`, `myotherapy.html` — each a genuine
+  `blog.html`, `grooming.html`, `courses.html`, `boarding.html`, `myotherapy.html` — each a genuine
   URL with its own `<title>`/description/Open Graph tags, loading only its own JS.
 - **Has no build step and no JSX anywhere.** Every file under `assets/js/` is plain
   JavaScript using `React.createElement(...)` directly instead of JSX. Each HTML page
@@ -39,6 +39,7 @@ grooming.html
 courses.html
 boarding.html
 myotherapy.html
+blog.html             — API-backed articles; CMS publishing needs no Git push
 
 assets/
   css/
@@ -69,6 +70,9 @@ scripts/build.mjs        — OPTIONAL. Only used by CI to minify assets/js and a
                             deploy the site — see "Deployment" below.
 vendor-original/          — the untouched vendor handover (JSX), reference only
 ```
+
+Phase 2 blog publishing, search indexing, invoice prerequisites, private PDF storage,
+and deployment checks are documented in [docs/phase2-operations.md](docs/phase2-operations.md).
 
 ### Local development
 

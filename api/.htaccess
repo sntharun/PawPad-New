@@ -8,6 +8,7 @@ Options -Indexes
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
   # Nothing inside lib/ can be opened from a browser.
   RewriteRule ^lib(/|$) - [F,L]
+  RewriteRule ^private(/|$) - [F,L]
 </IfModule>
 
 # config.php, the sample, notes and other non-entry files cannot be opened directly.
