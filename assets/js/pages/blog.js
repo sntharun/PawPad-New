@@ -138,8 +138,7 @@ function BlogPage() {
     return e("div", { className: "page-enter" }, e("article", { className: "blog-article" }, e("div", { className: "container blog-article-inner" },
       e("a", { className: "blog-back", href: "blog.html" }, "← All stories"),
       loading ? e("p", { role: "status" }, "Loading article…") : error ? e("p", { role: "alert", className: "blog-empty" }, error) : post && e(React.Fragment, null,
-        e("p", { className: "eyebrow" }, "Pawpad journal"),
-        e("h1", { className: "h-display", style: { marginTop: 24 } }, post.title),
+        e("h1", { className: "h-display" }, post.title),
         e("p", { className: "blog-byline" }, [post.author || "Pawpad", blogDate(post.publishedAt)].filter(Boolean).join(" · ")),
         post.coverUrl && e("figure", { className: "blog-cover" }, e("img", { src: post.coverUrl, alt: post.coverAlt || post.title }), post.coverCaption && e("figcaption", null, post.coverCaption)),
         e("p", { className: "blog-summary" }, post.summary),
@@ -153,8 +152,7 @@ function BlogPage() {
   }
   return e("div", { className: "page-enter" },
     e("section", { className: "blog-hero" }, e("div", { className: "container" },
-      e("p", { className: "eyebrow" }, "The Pawpad journal"),
-      e("h1", { className: "h-display", style: { marginTop: 24 } }, "Stories and care, ", e("em", { className: "italic", style: { color: "var(--driftwood)" } }, "thoughtfully shared")),
+      e("h1", { className: "h-display" }, "Stories and care, ", e("em", { className: "italic", style: { color: "var(--driftwood)" } }, "thoughtfully shared")),
       e("p", { className: "lead" }, "Practical thoughts on conscious grooming, animal wellbeing, and helping dogs and cats feel safe in our care.")
     )),
     e("section", { className: "blog-list" }, e("div", { className: "container" },
